@@ -33,7 +33,7 @@ static int snd_rpi_googlevoicehat_soundcard_hw_params(
 	struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
-	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
 
 	unsigned int sample_bits =
 		snd_pcm_format_physical_width(params_format(params));
@@ -45,19 +45,20 @@ static int snd_rpi_googlevoicehat_soundcard_hw_params(
 static struct snd_soc_ops snd_rpi_googlevoicehat_soundcard_ops = {
 	.hw_params = snd_rpi_googlevoicehat_soundcard_hw_params,
 };
+SND_SOC_DAILINK_DEFS(voicehat,
+	DAILINK_COMP_ARRAY(COMP_EMPTY()),
+	DAILINK_COMP_ARRAY(COMP_CODEC("voicehat-codec", "voicehat-hifi")),
+	DAILINK_COMP_ARRAY(COMP_EMPTY()));
 
 static struct snd_soc_dai_link snd_rpi_googlevoicehat_soundcard_dai[] = {
 {
 	.name		= "Google voiceHAT SoundCard",
 	.stream_name	= "Google voiceHAT SoundCard HiFi",
-	.cpu_dai_name	= "bcm2708-i2s.0",
-	.codec_dai_name	= "voicehat-hifi",
-	.platform_name	= "bcm2708-i2s.0",
-	.codec_name	= "voicehat-codec",
 	.dai_fmt	= SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
 				SND_SOC_DAIFMT_CBS_CFS,
 	.ops		= &snd_rpi_googlevoicehat_soundcard_ops,
 	.init		= snd_rpi_googlevoicehat_soundcard_init,
+	SND_SOC_DAILINK_REG(voicehat),
 },
 };
 
@@ -74,6 +75,7 @@ static int snd_rpi_googlevoicehat_soundcard_probe(struct platform_device *pdev)
 	int ret = 0;
 
 	snd_rpi_googlevoicehat_soundcard.dev = &pdev->dev;
+	// printk("ZZZZZ: pdev: %s", pdev->dev.name);
 
 	if (pdev->dev.of_node) {
 		struct device_node *i2s_node;
@@ -81,12 +83,13 @@ static int snd_rpi_googlevoicehat_soundcard_probe(struct platform_device *pdev)
 		i2s_node = of_parse_phandle(pdev->dev.of_node,
 					"i2s-controller", 0);
 
-		if (i2s_node) {
-			dai->cpu_dai_name = NULL;
-			dai->cpu_of_node = i2s_node;
-			dai->platform_name = NULL;
-			dai->platform_of_node = i2s_node;
+		if (!i2s_node) {
+			pr_err("Could not find i2s node in device tree");
+			return -ENODEV;
 		}
+
+		dai->cpus->of_node = i2s_node;
+		dai->platforms->of_node = i2s_node;
 	}
 
 	ret = snd_soc_register_card(&snd_rpi_googlevoicehat_soundcard);
